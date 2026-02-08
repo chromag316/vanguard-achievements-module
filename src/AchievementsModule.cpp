@@ -5193,13 +5193,13 @@ namespace cmangos_module
             PlayerAchievementMgr* playerMgr = GetPlayerAchievementMgr(player);
             if (playerMgr)
             {
-                playerMgr->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_WIN_DUEL, 1);
+                playerMgr->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_LOSE_DUEL, 1);
             }
 
             PlayerAchievementMgr* otherPlayerMgr = GetPlayerAchievementMgr(opponent);
             if (otherPlayerMgr)
             {
-                otherPlayerMgr->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_LOSE_DUEL, 1);
+                otherPlayerMgr->UpdateAchievementCriteria(ACHIEVEMENT_CRITERIA_TYPE_WIN_DUEL, 1);
             }
         }
     }
