@@ -26,8 +26,7 @@ jobs:
         -DBUILD_TOOLS=OFF
         -DBUILD_EXTRACTORS=OFF
         -DBUILD_PLAYERBOTS=OFF
-        -DBUILD_MODULES=ON
-        -DBUILD_MODULE_ACHIEVEMENTS=ON
+        -DBUILD_ACHIEVEMENTS=ON
         -DENABLE_WARNINGS_AS_ERRORS=OFF
 
     steps:
@@ -36,13 +35,14 @@ jobs:
         with:
           path: achievements
 
-      - name: Check out mangos-classic
+      - name: Check out vanguard-core
         uses: actions/checkout@v4
         with:
-          repository: cmangos/mangos-classic
+          # Fork of cmangos/mangos-classic whose `vanguard` branch carries the
+          # AchievementHooks call sites (src/game/Achievements/AchievementHooks.h)
+          repository: chromag316/vanguard-core
           path: mangos-classic
-          # Use the latest commit on the master branch
-          ref: master
+          ref: vanguard
 
       - name: Install build dependencies
         run: |
@@ -62,20 +62,12 @@ jobs:
             pkg-config \
             zlib1g-dev
 
-      - name: Apply module framework patch
-        run: |
-          cd mangos-classic
-          git apply --whitespace=fix ../achievements/patches/classic.patch
-
-      - name: Place module inside core tree
-        run: |
-          mkdir -p mangos-classic/src/modules/achievements
-          cp -r achievements/. mangos-classic/src/modules/achievements/
-
       - name: Configure CMake
+        # Build this checkout instead of the commit pinned in cmake/vanguard-modules.cmake
         run: |
           cmake -S mangos-classic -B build \
-            ${{ env.CMAKE_FLAGS }}
+            ${{ env.CMAKE_FLAGS }} \
+            -DFETCHCONTENT_SOURCE_DIR_ACHIEVEMENTS=${{ github.workspace }}/achievements
 
       - name: Build
         run: cmake --build build -j$(nproc)

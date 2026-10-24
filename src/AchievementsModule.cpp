@@ -3693,14 +3693,57 @@ namespace cmangos_module
     }
 
     AchievementsModule::AchievementsModule()
-    : Module("Achievements", new AchievementsModuleConfig())
     {
 
     }
 
-    const AchievementsModuleConfig* AchievementsModule::GetConfig() const
+    void AchievementsModule::OnLoadConfig()
     {
-        return (AchievementsModuleConfig*)Module::GetConfig();
+        m_config.Load();
+    }
+
+    void AchievementsModule::OnWorldInitialized()
+    {
+        sLog.outString("Initializing Achievements module");
+        OnInitialize();
+    }
+
+    void AchievementsModule::OnWorldUpdated(uint32 elapsed)
+    {
+        OnUpdate(elapsed);
+    }
+
+    // ".achievements <name> [args]": same parsing and security checks as the former
+    // module framework (ModuleMgr::OnExecuteCommand). Returns false if not ours.
+    bool AchievementsModule::OnChatCommand(ChatHandler* handler, const std::string& command)
+    {
+        const size_t prefixEnd = command.find(' ');
+        if (prefixEnd == std::string::npos || command.substr(0, prefixEnd) != GetChatCommandPrefix())
+            return false;
+
+        std::string name = command.substr(prefixEnd + 1);
+        std::string args;
+        const size_t nameEnd = name.find(' ');
+        if (nameEnd != std::string::npos)
+        {
+            args = name.substr(nameEnd + 1);
+            name = name.substr(0, nameEnd);
+        }
+
+        if (name.empty())
+            return false;
+
+        WorldSession* session = handler->GetSession();
+        if (!session)
+            return false;
+
+        for (const ModuleChatCommand& chatCommand : *GetCommandTable())
+        {
+            if (chatCommand.name == name && session->GetSecurity() >= chatCommand.securityLevel)
+                return chatCommand.callback(session, args);
+        }
+
+        return false;
     }
 
     bool AchievementsModule::HasAddon(Player* player) const
@@ -5735,7 +5778,7 @@ namespace cmangos_module
         }
     }
 
-    void AchievementsModule::OnActionBidWinning(AuctionEntry* auctionEntry, const ObjectGuid& owner, const ObjectGuid& bidder)
+    void AchievementsModule::OnAuctionBidWinning(AuctionEntry* auctionEntry, const ObjectGuid& owner, const ObjectGuid& bidder)
     {
         PlayerAchievementMgr* playerMgr = GetPlayerAchievementMgr(sObjectMgr.GetPlayer(bidder));
         if (playerMgr)
@@ -6093,6 +6136,7 @@ namespace cmangos_module
             { "getAchievements", std::bind(&AchievementsModule::HandleGetAchievements, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
             { "getCriteria", std::bind(&AchievementsModule::HandleGetCriteria, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
             { "getCharacterCriteria", std::bind(&AchievementsModule::HandleGetCharacterCriteria, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
+            { "getCharacterAchievements", std::bind(&AchievementsModule::HandleGetCharacterAchievements, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
             { "add", std::bind(&AchievementsModule::HandleAddAchievement, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
             { "remove", std::bind(&AchievementsModule::HandleRemoveAchievement, this, std::placeholders::_1, std::placeholders::_2), SEC_GAMEMASTER },
         };
@@ -6249,6 +6293,22 @@ namespace cmangos_module
         return false;
     }
 
+    // Sent by the Achiever addon; GetCharacterAchievements existed but had no command.
+    bool AchievementsModule::HandleGetCharacterAchievements(WorldSession* session, const std::string& args)
+    {
+        if (GetConfig()->enabled)
+        {
+            Player* player = session->GetPlayer();
+            if (player)
+            {
+                GetCharacterAchievements(player);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     bool AchievementsModule::HandleAddAchievement(WorldSession* session, const std::string& args)
     {
         if (GetConfig()->enabled)
@@ -6350,4 +6410,11 @@ namespace cmangos_module
         MANGOS_ASSERT(false);
         return nullptr;
     }
+}
+
+// Called by the core (World::SetInitialWorldSettings) when built with BUILD_ACHIEVEMENTS.
+// Allocated once and never freed, like the former module framework did.
+void AddAchievementHooks()
+{
+    AchievementHooks::Register(new cmangos_module::AchievementsModule());
 }

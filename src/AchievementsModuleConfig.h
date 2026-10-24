@@ -1,5 +1,5 @@
 #pragma once
-#include "ModuleConfig.h"
+#include "Config/Config.h"
 
 namespace cmangos_module
 {
@@ -235,11 +235,15 @@ namespace cmangos_module
         ACHIEVEMENT_CATEGORY_STATISTICS = 1
     };
 
-    class AchievementsModuleConfig : public ModuleConfig
+    class AchievementsModuleConfig
     {
     public:
         AchievementsModuleConfig();
-        bool OnLoad();
+        // Reads achievements.conf from the server's config directory.
+        bool Load();
+
+    private:
+        Config config;
 
     public:
         bool enabled;

@@ -1,10 +1,12 @@
 #include "AchievementsModuleConfig.h"
 
+#include "Log/Log.h"
+#include "SystemConfig.h"
+
 namespace cmangos_module
 {
     AchievementsModuleConfig::AchievementsModuleConfig()
-    : ModuleConfig("achievements.conf")
-    , enabled(false)
+    : enabled(false)
     , sendMessage(false)
     , sendAddon(false)
     , sendVisual(false)
@@ -16,8 +18,14 @@ namespace cmangos_module
 
     }
 
-    bool AchievementsModuleConfig::OnLoad()
+    bool AchievementsModuleConfig::Load()
     {
+        if (!config.SetSource(SYSCONFDIR "achievements.conf", ""))
+        {
+            sLog.outError("Failed to open configuration file achievements.conf");
+            return false;
+        }
+
         enabled = config.GetBoolDefault("Achievements.Enable", false);
         sendMessage = config.GetBoolDefault("Achievements.SendMessage", false);
         sendAddon = config.GetBoolDefault("Achievements.SendAddon", false);

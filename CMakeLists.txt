@@ -43,13 +43,10 @@ if(BUILD_PLAYERBOTS)
     target_compile_definitions(${LIBRARY_NAME} PRIVATE ENABLE_PLAYERBOTS)
 endif()
 
-# Module framework include and definitions
-target_include_directories(${LIBRARY_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/modules/modules/src
-)
+# The core calls this module through src/game/Achievements/AchievementHooks.h
+# (reached via the shared library's include path).
 target_compile_definitions(${LIBRARY_NAME} PRIVATE
-    ENABLE_MODULES
-    ENABLE_ACHIEVEMENTS
+    BUILD_ACHIEVEMENTS
 )
 
 # Expansion flag
@@ -62,7 +59,6 @@ elseif(${CMAKE_PROJECT_NAME} MATCHES "WoTLK")
 endif()
 
 target_link_libraries(${LIBRARY_NAME}
-    modules
     shared
     RecastNavigation::Detour
 )

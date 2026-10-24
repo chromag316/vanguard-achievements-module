@@ -1,11 +1,14 @@
 #ifndef CMANGOS_MODULE_ACHIEVEMENTS_H
 #define CMANGOS_MODULE_ACHIEVEMENTS_H
 
-#include "Module.h"
+#include "Achievements/AchievementHooks.h"
 #include "AchievementsModuleConfig.h"
 
 #include "Database/SQLStorage.h"
+#include "Entities/Unit.h"
 
+#include <functional>
+#include <vector>
 #include <map>
 #include <unordered_map>
 #include <string>
@@ -17,6 +20,14 @@ namespace cmangos_module
     class AchievementsModule;
     class PlayerAchievementMgr;
     class AchievementScriptMgr;
+
+    // A ".achievements <name> <args>" chat command.
+    struct ModuleChatCommand
+    {
+        std::string name;
+        std::function<bool(WorldSession*, const std::string&)> callback;
+        uint32 securityLevel;
+    };
 
     struct AchievementEntry
     {
@@ -781,7 +792,7 @@ namespace cmangos_module
         AchievementsModule* m_module;
     };
 
-    class AchievementsModule : public Module
+    class AchievementsModule : public ::AchievementHooks
     {
         friend class PlayerAchievementMgr;
         friend class AchievementScriptMgr;
@@ -789,11 +800,13 @@ namespace cmangos_module
 
     public:
         AchievementsModule();
-        const AchievementsModuleConfig* GetConfig() const override;
+        const AchievementsModuleConfig* GetConfig() const { return &m_config; }
 
-        // Module Hooks
-        void OnInitialize() override;
-        void OnUpdate(uint32 elapsed) override;
+        // World Hooks
+        void OnLoadConfig() override;
+        void OnWorldInitialized() override;
+        void OnWorldUpdated(uint32 elapsed) override;
+        bool OnChatCommand(ChatHandler* handler, const std::string& command) override;
 
         // Player Hooks
         void OnPreCharacterCreated(Player* player) override;
@@ -824,7 +837,8 @@ namespace cmangos_module
         void OnEmote(Player* player, Unit* target, uint32 emote) override;
         void OnBuyBankSlot(Player* player, uint32 slot, uint32 price) override;
         void OnSellItem(Player* player, Item* item, uint32 money) override;
-        void OnCreateItem(Player* player, Item* item, uint32 amount) override;
+        // Not called by the core: it stamped the creator on consumables (hardcore-challenge leftover), not achievements.
+        void OnCreateItem(Player* player, Item* item, uint32 amount);
         void OnModifyMoney(Player* player, int32 diff) override;
         void OnSummoned(Player* player, const ObjectGuid& summoner) override;
         void OnAreaExplored(Player* player, uint32 areaId) override;
@@ -865,24 +879,31 @@ namespace cmangos_module
         // Auction House Hooks
         void OnSellItem(AuctionEntry* auctionEntry, Player* player) override;
         void OnUpdateBid(AuctionEntry* auctionEntry, Player* player, uint32 newBid) override;
-        void OnActionBidWinning(AuctionEntry* auctionEntry, const ObjectGuid& owner, const ObjectGuid& bidder) override;
+        void OnAuctionBidWinning(AuctionEntry* auctionEntry, const ObjectGuid& owner, const ObjectGuid& bidder) override;
 
         // Mail Hooks
         void OnSendMail(const MailDraft& mail, Player* player, const ObjectGuid& receiver, uint32 cost) override;
         void OnMailTakeItem(Mail* mail, Player* player, Item* item, const ObjectGuid& sender) override;
 
         // Commands
-        std::vector<ModuleChatCommand>* GetCommandTable() override;
-        const char* GetChatCommandPrefix() const override { return "achievements"; }
+        std::vector<ModuleChatCommand>* GetCommandTable();
+        const char* GetChatCommandPrefix() const { return "achievements"; }
         bool HandleEnableAchiever(WorldSession* session, const std::string& args);
         bool HandleGetCategories(WorldSession* session, const std::string& args);
         bool HandleGetAchievements(WorldSession* session, const std::string& args);
         bool HandleGetCriteria(WorldSession* session, const std::string& args);
         bool HandleGetCharacterCriteria(WorldSession* session, const std::string& args);
+        bool HandleGetCharacterAchievements(WorldSession* session, const std::string& args);
         bool HandleAddAchievement(WorldSession* session, const std::string& args);
         bool HandleRemoveAchievement(WorldSession* session, const std::string& args);
 
     private:
+        // Called from the world hooks (formerly the module framework's lifecycle).
+        void OnInitialize();
+        void OnUpdate(uint32 elapsed);
+
+        AchievementsModuleConfig m_config;
+
         static uint32 GetCurrentPatch();
         static uint32 GetCurrentVersion() { return 1U; }
 

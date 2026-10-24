@@ -7,9 +7,10 @@ Backports WotLK achievements to CMaNGOS Classic.
 This module was ported from https://github.com/tsaah/core/tree/hb-achievements and has been
 updated to work with the latest CMaNGOS Classic core and classic-db.
 
-The upstream core no longer ships the historical generic `ModuleMgr`/`ModuleConfig`
-framework, so the current compatibility work focuses on a thin, achievement-specific
-hook surface and a much smaller core patch.
+The core calls this module through one achievement-specific interface,
+`src/game/Achievements/AchievementHooks.h`, carried by the `vanguard` branch of
+[chromag316/vanguard-core](https://github.com/chromag316/vanguard-core). The old generic
+`ModuleMgr`/`ModuleConfig` framework and `patches/classic.patch` are no longer used.
 
 <!-- ![Achievements UI](https://github.com/davidonete/cmangos-achievements/assets/11618807/caa813e9-0053-4405-8d00-cf04fe5c205f) -->
 
@@ -21,48 +22,34 @@ hook surface and a much smaller core patch.
 | CMaNGOS TBC | Untested |
 | CMaNGOS WoTLK | Unsupported |
 
-## Latest CMaNGOS Compatibility
+## Core integration
 
-The modernization work in this repository is aimed at keeping achievements working on
-current CMaNGOS cores without reviving the old module framework.
-
-- The legacy `ModuleMgr` and `ModuleConfig` dependency is being replaced with a small
-   achievements-only integration surface.
-- Unused hook call sites are removed instead of being carried forward for compatibility.
-- The remaining core changes are kept as narrow and auditable as possible so the patch
-   stays maintainable against upstream changes.
-
+- `AchievementHooks` (in the core) declares every game event the module uses, with a
+  do-nothing default. `AchievementsModule` overrides them, and the core registers it
+  through `AddAchievementHooks()` at world start-up.
+- All call sites are guarded by `#ifdef BUILD_ACHIEVEMENTS`, so a core built without the
+  module carries no achievement code.
+- `.achievements <command>` chat commands (used by the Achiever addon) arrive through
+  `AchievementHooks::OnChatCommand`.
 
 ## Installation
 
-1. **Prepare a current CMaNGOS Classic or TBC checkout** and apply
-   `patches/classic.patch` to the core tree before building. The old generic module
-   framework is no longer required in upstream cores.
+1. **Build the core with achievements.** Use the `vanguard` branch of
+   `chromag316/vanguard-core`; CMake fetches this module at the commit pinned in
+   `cmake/vanguard-modules.cmake`:
    ```bash
-   cd mangos-classic
-   git apply --whitespace=fix /path/to/cmangos-achievements/patches/classic.patch
+   cmake -S vanguard-core -B vanguard-core/build -G "Visual Studio 17 2022" -A x64 -DBUILD_PLAYERBOTS=ON -DBUILD_ACHIEVEMENTS=ON -DBoost_DIR=<boost>/lib64-msvc-14.3/cmake/Boost-1.85.0
    ```
+   To build a local checkout of this repository instead of the pinned commit, add
+   `-DFETCHCONTENT_SOURCE_DIR_ACHIEVEMENTS=<path to this checkout>`. Vanguard's
+   `devkit/scripts/build_vanguard.ps1` sets all of this up.
 
-2. **Copy this repository into** `src/modules/achievements` inside the CMaNGOS source
-   tree:
-   ```bash
-   git clone https://github.com/nemanuel/cmangos-achievements \
-       mangos-classic/src/modules/achievements
-   ```
-
-3. **Configure CMake and build** the core with achievements enabled:
-  
-   ```bash
-   # Windows
-   cmake -S .\mangos-classic -B .\mangos-classic\build -G "Visual Studio 17 2022" -A x64 -DBUILD_MODULES=ON -DBUILD_PLAYERBOTS=ON -DBUILD_MODULE_ACHIEVEMENTS=ON -DBoost_DIR="C:\local\boost_1_85_0\lib64-msvc-14.3\cmake\Boost-1.85.0"
-   ```
-
-4. **Install the configuration file** — copy
+2. **Install the configuration file** — copy
    `src/modules/achievements/src/achievements.conf.dist.in` to the directory that
    contains your `mangosd` executable and rename it to `achievements.conf`. Edit the
    options as needed (see [Configuration](#configuration)).
 
-5. **Install the database schemas** (first time only) - run PowerShell commands:
+3. **Install the database schemas** (first time only) - run PowerShell commands:
    ```bash
    # World database
    Get-ChildItem -Path ".\mangos-classic\src\modules\Achievements\sql\install\world\*.sql" | ForEach-Object {
@@ -75,14 +62,14 @@ current CMaNGOS cores without reviving the old module framework.
    }
    ```
 
-6. **Upgrading an existing installation** — run the migration scripts instead:
+4. **Upgrading an existing installation** — run the migration scripts instead:
    ```bash
    mysql -u<user> -p<pass> <world_db>   < sql/migrate/world_migrate.sql
    mysql -u<user> -p<pass> <chars_db>   < sql/migrate/characters_migrate.sql
    ```
    The migration scripts are idempotent and safe to re-run.
 
-7. **Install the client addon** — download and install
+5. **Install the client addon** — download and install
    https://github.com/celguar/Achiever
 
 ## Configuration
@@ -104,7 +91,7 @@ current CMaNGOS cores without reviving the old module framework.
 Set `Achievements.Enable = 0` in `achievements.conf` and restart the server.
 
 **Option B — Full removal:**
-1. Recompile without `-DBUILD_MODULE_ACHIEVEMENTS=ON`
+1. Recompile without `-DBUILD_ACHIEVEMENTS=ON`
 2. Remove database tables:
    ```bash
    mysql -u<user> -p<pass> <chars_db>   < sql/uninstall/characters/characters.sql
@@ -124,19 +111,15 @@ Set `Achievements.Enable = 0` in `achievements.conf` and restart the server.
 | [docs/event-architecture.md](docs/event-architecture.md) | Target modern event architecture and migration strategy |
 | [docs/classic-patch-modernization-report.md](docs/classic-patch-modernization-report.md) | Compile errors, failing patch hunks, ModuleMgr dependencies, and patch-footprint replacement recommendations |
 
-### Required Core Changes
-
-A reduced patch to CMaNGOS Classic is required to keep the achievements module
-working on current upstream. The migration docs split the work into audited hook
-classes, a minimal residual hook set, and the follow-up step of replacing the
-legacy framework with a thinner achievement-specific surface.
+The documents above were written while planning the move away from the module
+framework; the implemented hook set is `AchievementHooks.h` in the core.
 
 ## CI
 
 The GitHub Actions workflow (`.github/workflows/build.yml`) automatically:
 
-1. Checks out the latest `mangos-classic` master
-2. Builds the core + achievements module
+1. Checks out the `vanguard` branch of `chromag316/vanguard-core`
+2. Builds the core with this checkout of the module (`BUILD_ACHIEVEMENTS=ON`)
 3. Validates all SQL scripts against a live MySQL 8.0 instance
 4. Verifies idempotency of the migration scripts
 
